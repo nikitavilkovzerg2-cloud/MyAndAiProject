@@ -24,7 +24,7 @@ fun rgb2lab(r: Int, g: Int, b: Int): FloatArray {
 private fun fx(t: Float): Float =
     if (t > 0.008856f) t.pow(1f/3f) else (7.787f*t + 16f/116f)
 
-object DmcPalette {
+object DmcPalette : PaletteProvider {
     private val RAW = """
 310|Black|000000
 Blanc|White|FFFFFF
@@ -244,7 +244,7 @@ Ecru|Ecru|F0EADA
 3771|Terra Cotta Ultra Vy Dk|8B4B3B
 """
 
-    val all: List<DmcColor> by lazy {
+    override val all: List<DmcColor> by lazy {
         val list = mutableListOf<DmcColor>()
         val seen = mutableSetOf<String>()
         for (line in RAW.trim().split("\n")) {
@@ -262,7 +262,7 @@ Ecru|Ecru|F0EADA
         list
     }
 
-    fun nearest(lab: FloatArray): DmcColor {
+    override fun nearest(lab: FloatArray): DmcColor {
         var best = all[0]; var bd = Float.MAX_VALUE
         for (c in all) {
             val d = sq(c.lab[0]-lab[0]) + sq(c.lab[1]-lab[1]) + sq(c.lab[2]-lab[2])
@@ -271,7 +271,7 @@ Ecru|Ecru|F0EADA
         return best
     }
 
-    fun nearestIndex(lab: FloatArray, list: List<DmcColor>): Int {
+    override fun nearestIndex(lab: FloatArray, list: List<DmcColor>): Int {
         var bi = 0; var bd = Float.MAX_VALUE
         for (i in list.indices) {
             val c = list[i]
