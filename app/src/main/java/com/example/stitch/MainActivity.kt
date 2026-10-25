@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private var chart: ChartBuilder.Chart? = null
     private var imgAspect = 1f
     private var suppressAspect = false
+    private var currentPalette: PaletteProvider = DmcPalette
 
     private lateinit var chartView: ChartView
     private lateinit var txtStatus: TextView
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etC: EditText
     private lateinit var spSpeckle: Spinner
     private lateinit var spCpp: Spinner
+    private lateinit var spType: Spinner
     private lateinit var btnBuild: Button
     private lateinit var btnPdf: Button
     private lateinit var btnPng: Button
@@ -66,6 +68,17 @@ class MainActivity : AppCompatActivity() {
         btnPng.setOnClickListener { exportPng() }
         etW.doAfter { if (!suppressAspect) syncAspect(true) }
         etH.doAfter { if (!suppressAspect) syncAspect(false) }
+        
+        spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                currentPalette = when (position) {
+                    0 -> DmcPalette
+                    1 -> DiamondPalette
+                    else -> DmcPalette
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     private fun buildUI() {
@@ -109,6 +122,14 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, 0)
         }
         content.addView(txtStatus)
+
+        content.addView(sectionLabel("ТИП МОЗАИКИ"))
+        spType = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Вышивка крестиком (DMC)", "Алмазная мозаика (AB)"))
+            setSelection(0)
+        }
+        content.addView(spType)
 
         content.addView(sectionLabel("РАЗМЕР СХЕМЫ (КРЕСТИКИ)"))
         val sizeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(4), 0, 0) }
@@ -223,7 +244,7 @@ class MainActivity : AppCompatActivity() {
         txtStatus.text = "Строю схему..."
         lifecycleScope.launch {
             try {
-                val ch = withContext(Dispatchers.Default) { ChartBuilder.build(bmp, w, h, c, sp) }
+                val ch = withContext(Dispatchers.Default) { ChartBuilder.build(bmp, w, h, c, sp, currentPalette) }
                 val render = withContext(Dispatchers.Default) { ChartRenderer.render(ch, 20) }
                 chart = ch
                 chartView.setBitmap(render)
@@ -434,7 +455,7 @@ object ChartBuilder {
         "abcdefghjkmnpqrstuvwxyz" + "@#$%&*=?<>/!~^"
     ).map { it.toString() }
 
-    fun build(src: Bitmap, W: Int, H: Int, nColors: Int, speckle: Int): Chart {
+    fun build(src: Bitmap, W: Int, H: Int, nColors: Int, speckle: Int, palette: PaletteProvider = DmcPalette): Chart {
         val pixels = boxResample(src, W, H)
         val n = W * H
         val labs = FloatArray(n * 3)
@@ -458,14 +479,14 @@ object ChartBuilder {
         val used = mutableSetOf<String>()
         for (c in 0 until nColors) {
             val lab = floatArrayOf(centroids[c*3], centroids[c*3+1], centroids[c*3+2])
-            val dmc = DmcPalette.nearest(lab)
+            val dmc = palette.nearest(lab)
             if (used.add(dmc.code)) dmcList.add(dmc)
         }
 
         val cells = IntArray(n)
         for (i in 0 until n) {
             val lab = floatArrayOf(labs[i*3], labs[i*3+1], labs[i*3+2])
-            cells[i] = DmcPalette.nearestIndex(lab, dmcList)
+            cells[i] = palette.nearestIndex(lab, dmcList)
         }
         if (speckle > 0) despeckle(cells, W, H, dmcList.size, speckle)
 
