@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Темный фон -->
+    <path android:fillColor="#161A21" android:pathData="M0,0h108v108h-108z"/>
+    
+    <!-- Рамка-пяльцы -->
+    <path android:strokeColor="#2A3140" android:strokeWidth="6" android:pathData="M14,14 h80 v80 h-80 z"/>
+    
+    <!-- Крестик по центру (красный) -->
+    <path android:strokeColor="#E31D42" android:strokeWidth="8" android:strokeLineCap="round" android:pathData="M42,42 l24,24 m0,-24 l-24,24"/>
+    
+    <!-- Крестик сверху-слева (синий) -->
+    <path android:strokeColor="#3B9BE0" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M20,20 l12,12 m0,-12 l-12,12"/>
+    
+    <!-- Крестик снизу-справа (зеленый) -->
+    <path android:strokeColor="#3B9B3B" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M76,76 l12,12 m0,-12 l-12,12"/>
+    
+    <!-- Крестик сверху-справа (желтый) -->
+    <path android:strokeColor="#FFD600" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M76,20 l12,12 m0,-12 l-12,12"/>
+    
+    <!-- Крестик снизу-слева (фиолетовый) -->
+    <path android:strokeColor="#A3639B" android:strokeWidth="6" android:strokeLineCap="round" android:pathData="M20,76 l12,12 m0,-12 l-12,12"/>
+
+    <!-- Иголка с ниткой -->
+    <path android:strokeColor="#E8ECF4" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M82,20 L102,4"/>
+    <path android:strokeColor="#E31D42" android:strokeWidth="2" android:pathData="M54,54 Q80,80 102,4"/>
+</vector>
