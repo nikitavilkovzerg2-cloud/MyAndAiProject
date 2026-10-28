@@ -39,7 +39,6 @@ class MainActivity : AppCompatActivity() {
     private var chart: ChartBuilder.Chart? = null
     private var imgAspect = 1f
     private var suppressAspect = false
-    private var currentPalette: PaletteProvider = DmcPalette
 
     private lateinit var chartView: ChartView
     private lateinit var txtStatus: TextView
@@ -50,7 +49,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etC: EditText
     private lateinit var spSpeckle: Spinner
     private lateinit var spCpp: Spinner
-    private lateinit var spType: Spinner
     private lateinit var btnBuild: Button
     private lateinit var btnPdf: Button
     private lateinit var btnPng: Button
@@ -68,17 +66,6 @@ class MainActivity : AppCompatActivity() {
         btnPng.setOnClickListener { exportPng() }
         etW.doAfter { if (!suppressAspect) syncAspect(true) }
         etH.doAfter { if (!suppressAspect) syncAspect(false) }
-        
-        spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                currentPalette = when (position) {
-                    0 -> DmcPalette
-                    1 -> DiamondPalette
-                    else -> DmcPalette
-                }
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
     }
 
     private fun buildUI() {
@@ -122,14 +109,6 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, 0)
         }
         content.addView(txtStatus)
-
-        content.addView(sectionLabel("ТИП МОЗАИКИ"))
-        spType = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Вышивка крестиком (DMC)", "Алмазная мозаика (AB)"))
-            setSelection(0)
-        }
-        content.addView(spType)
 
         content.addView(sectionLabel("РАЗМЕР СХЕМЫ (КРЕСТИКИ)"))
         val sizeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(4), 0, 0) }
@@ -244,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         txtStatus.text = "Строю схему..."
         lifecycleScope.launch {
             try {
-                val ch = withContext(Dispatchers.Default) { ChartBuilder.build(bmp, w, h, c, sp, currentPalette) }
+                val ch = withContext(Dispatchers.Default) { ChartBuilder.build(bmp, w, h, c, sp) }
                 val render = withContext(Dispatchers.Default) { ChartRenderer.render(ch, 20) }
                 chart = ch
                 chartView.setBitmap(render)
@@ -341,9 +320,6 @@ private fun EditText.doAfter(action: (String) -> Unit) {
     })
 }
 
-/* ============================================================
-   ChartView — просмотр с жестами
-   ============================================================ */
 class ChartView(context: android.content.Context) : android.view.View(context) {
     private var bmp: Bitmap? = null
     private var scale = 1f; private var tx = 0f; private var ty = 0f
@@ -396,9 +372,6 @@ class ChartView(context: android.content.Context) : android.view.View(context) {
     }
 }
 
-/* ============================================================
-   ChartRenderer
-   ============================================================ */
 object ChartRenderer {
     fun render(ch: ChartBuilder.Chart, cellSize: Int): Bitmap {
         val bmp = Bitmap.createBitmap(ch.W * cellSize, ch.H * cellSize, Bitmap.Config.ARGB_8888)
@@ -437,9 +410,6 @@ object ChartRenderer {
     }
 }
 
-/* ============================================================
-   ChartBuilder
-   ============================================================ */
 object ChartBuilder {
 
     data class Chart(
@@ -455,7 +425,7 @@ object ChartBuilder {
         "abcdefghjkmnpqrstuvwxyz" + "@#$%&*=?<>/!~^"
     ).map { it.toString() }
 
-    fun build(src: Bitmap, W: Int, H: Int, nColors: Int, speckle: Int, palette: PaletteProvider = DmcPalette): Chart {
+    fun build(src: Bitmap, W: Int, H: Int, nColors: Int, speckle: Int): Chart {
         val pixels = boxResample(src, W, H)
         val n = W * H
         val labs = FloatArray(n * 3)
@@ -479,14 +449,28 @@ object ChartBuilder {
         val used = mutableSetOf<String>()
         for (c in 0 until nColors) {
             val lab = floatArrayOf(centroids[c*3], centroids[c*3+1], centroids[c*3+2])
-            val dmc = palette.nearest(lab)
-            if (used.add(dmc.code)) dmcList.add(dmc)
+            
+            // Сортируем ВСЮ палитру DMC по удаленности от текущего цвета
+            val sortedDmc = DmcPalette.all.sortedBy {
+                val dx = it.lab[0] - lab[0]
+                val dy = it.lab[1] - lab[1]
+                val dz = it.lab[2] - lab[2]
+                dx*dx + dy*dy + dz*dz
+            }
+            
+            // Берем первый цвет, которого еще нет в нашем списке
+            for (dmc in sortedDmc) {
+                if (used.add(dmc.code)) {
+                    dmcList.add(dmc)
+                    break
+                }
+            }
         }
 
         val cells = IntArray(n)
         for (i in 0 until n) {
             val lab = floatArrayOf(labs[i*3], labs[i*3+1], labs[i*3+2])
-            cells[i] = palette.nearestIndex(lab, dmcList)
+            cells[i] = DmcPalette.nearestIndex(lab, dmcList)
         }
         if (speckle > 0) despeckle(cells, W, H, dmcList.size, speckle)
 
@@ -507,6 +491,13 @@ object ChartBuilder {
         val sw = src.width; val sh = src.height
         val px = IntArray(sw * sh); src.getPixels(px, 0, sw, 0, 0, sw, sh)
         val out = IntArray(W * H)
+        
+        // Новая функция подавления пересвета
+        fun compress(v: Float): Int {
+            return if (v > 220f) (220f + (v - 220f) * 0.5f).toInt().coerceIn(0, 255) 
+            else v.toInt().coerceIn(0, 255)
+        }
+
         for (ty in 0 until H) {
             val y0 = (ty * sh) / H; val y1 = maxOf(y0 + 1, ((ty + 1) * sh) / H)
             for (tx in 0 until W) {
@@ -519,9 +510,14 @@ object ChartBuilder {
                 }
                 if (cnt == 0) cnt = 1
                 val af = (a.toFloat() / cnt) / 255f
-                val rr = ((r.toFloat()/cnt)*af + 255f*(1f-af)).toInt().coerceIn(0,255)
-                val gg = ((g.toFloat()/cnt)*af + 255f*(1f-af)).toInt().coerceIn(0,255)
-                val bb = ((b.toFloat()/cnt)*af + 255f*(1f-af)).toInt().coerceIn(0,255)
+                val rrRaw = (r.toFloat()/cnt)*af + 255f*(1f-af)
+                val ggRaw = (g.toFloat()/cnt)*af + 255f*(1f-af)
+                val bbRaw = (b.toFloat()/cnt)*af + 255f*(1f-af)
+                
+                val rr = compress(rrRaw)
+                val gg = compress(ggRaw)
+                val bb = compress(bbRaw)
+                
                 out[ty * W + tx] = (0xFF shl 24) or (rr shl 16) or (gg shl 8) or bb
             }
         }
@@ -563,10 +559,10 @@ object ChartBuilder {
     }
 
     private fun d2(pts: FloatArray, i: Int, centers: FloatArray, c: Int): Float {
-        val a = pts[i*3] - centers[c*3]
-        val b = pts[i*3+1] - centers[c*3+1]
-        val e = pts[i*3+2] - centers[c*3+2]
-        return a*a + b*b + e*e
+        val dl = (pts[i*3] - centers[c*3]) * 0.6f
+        val da = (pts[i*3+1] - centers[c*3+1]) * 1.4f
+        val db = (pts[i*3+2] - centers[c*3+2]) * 1.4f
+        return dl*dl + da*da + db*db
     }
 
     private fun despeckle(cells: IntArray, W: Int, H: Int, k: Int, strength: Int) {
@@ -587,9 +583,6 @@ object ChartBuilder {
     }
 }
 
-/* ============================================================
-   Экспорт в «Загрузки» через MediaStore
-   ============================================================ */
 object PdfExporter {
     fun export(ctx: android.content.Context, ch: ChartBuilder.Chart, cppIdx: Int): Uri {
         val cpp = when (cppIdx) { 0 -> 40; 1 -> 50; 2 -> 60; else -> 70 }
