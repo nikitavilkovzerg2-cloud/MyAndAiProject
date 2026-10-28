@@ -426,7 +426,13 @@ object ChartBuilder {
     ).map { it.toString() }
 
     fun build(src: Bitmap, W: Int, H: Int, nColors: Int, speckle: Int): Chart {
-        val pixels = boxResample(src, W, H)
+        var pixels = boxResample(src, W, H)
+
+        // Двукратное гауссово размытие сглаживает резкие переходы.
+        // Особенно важно для лица — убирает "грязные" пятна теней.
+        pixels = blur(pixels, W, H)
+        pixels = blur(pixels, W, H)
+
         val n = W * H
         val labs = FloatArray(n * 3)
         for (i in 0 until n) {
@@ -449,16 +455,12 @@ object ChartBuilder {
         val used = mutableSetOf<String>()
         for (c in 0 until nColors) {
             val lab = floatArrayOf(centroids[c*3], centroids[c*3+1], centroids[c*3+2])
-            
-            // Сортируем ВСЮ палитру DMC по удаленности от текущего цвета
+
+            // Сортируем палитру DMC по стандартному расстоянию LAB и берем ближайший уникальный
             val sortedDmc = DmcPalette.all.sortedBy {
-                val dx = it.lab[0] - lab[0]
-                val dy = it.lab[1] - lab[1]
-                val dz = it.lab[2] - lab[2]
-                dx*dx + dy*dy + dz*dz
+                DmcPalette.colorDistance(it.lab, lab)
             }
-            
-            // Берем первый цвет, которого еще нет в нашем списке
+
             for (dmc in sortedDmc) {
                 if (used.add(dmc.code)) {
                     dmcList.add(dmc)
@@ -487,16 +489,37 @@ object ChartBuilder {
         return Chart(W, H, cells, newPal, symbols, newCnt)
     }
 
+    // Гауссово размытие 3x3 для сглаживания цветов перед квантованием.
+    // Края обрабатываются с прижатием (clamp), чтобы не появилось темных рамок.
+    private fun blur(pixels: IntArray, w: Int, h: Int): IntArray {
+        val out = IntArray(pixels.size)
+        val k = floatArrayOf(1f, 2f, 1f, 2f, 4f, 2f, 1f, 2f, 1f)
+        val kSum = 16f
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                var r = 0f; var g = 0f; var b = 0f; var i = 0
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = (x + dx).coerceIn(0, w - 1)
+                    val ny = (y + dy).coerceIn(0, h - 1)
+                    val p = pixels[ny * w + nx]
+                    val wt = k[i++]
+                    r += ((p shr 16) and 0xFF) * wt
+                    g += ((p shr 8) and 0xFF) * wt
+                    b += (p and 0xFF) * wt
+                }
+                out[y * w + x] = (0xFF shl 24) or
+                    (((r / kSum).toInt()).coerceIn(0, 255) shl 16) or
+                    (((g / kSum).toInt()).coerceIn(0, 255) shl 8) or
+                    ((b / kSum).toInt()).coerceIn(0, 255)
+            }
+        }
+        return out
+    }
+
     private fun boxResample(src: Bitmap, W: Int, H: Int): IntArray {
         val sw = src.width; val sh = src.height
         val px = IntArray(sw * sh); src.getPixels(px, 0, sw, 0, 0, sw, sh)
         val out = IntArray(W * H)
-        
-        // Новая функция подавления пересвета
-        fun compress(v: Float): Int {
-            return if (v > 220f) (220f + (v - 220f) * 0.5f).toInt().coerceIn(0, 255) 
-            else v.toInt().coerceIn(0, 255)
-        }
 
         for (ty in 0 until H) {
             val y0 = (ty * sh) / H; val y1 = maxOf(y0 + 1, ((ty + 1) * sh) / H)
@@ -510,14 +533,12 @@ object ChartBuilder {
                 }
                 if (cnt == 0) cnt = 1
                 val af = (a.toFloat() / cnt) / 255f
-                val rrRaw = (r.toFloat()/cnt)*af + 255f*(1f-af)
-                val ggRaw = (g.toFloat()/cnt)*af + 255f*(1f-af)
-                val bbRaw = (b.toFloat()/cnt)*af + 255f*(1f-af)
-                
-                val rr = compress(rrRaw)
-                val gg = compress(ggRaw)
-                val bb = compress(bbRaw)
-                
+
+                // Убрано искусственное затемнение пересветов — светлые участки остаются светлыми
+                val rr = (((r.toFloat() / cnt) * af) + 255f * (1f - af)).toInt().coerceIn(0, 255)
+                val gg = (((g.toFloat() / cnt) * af) + 255f * (1f - af)).toInt().coerceIn(0, 255)
+                val bb = (((b.toFloat() / cnt) * af) + 255f * (1f - af)).toInt().coerceIn(0, 255)
+
                 out[ty * W + tx] = (0xFF shl 24) or (rr shl 16) or (gg shl 8) or bb
             }
         }
@@ -558,10 +579,11 @@ object ChartBuilder {
         return centers
     }
 
+    // Стандартное расстояние LAB (CIE76)
     private fun d2(pts: FloatArray, i: Int, centers: FloatArray, c: Int): Float {
-        val dl = (pts[i*3] - centers[c*3]) * 0.6f
-        val da = (pts[i*3+1] - centers[c*3+1]) * 1.4f
-        val db = (pts[i*3+2] - centers[c*3+2]) * 1.4f
+        val dl = pts[i*3] - centers[c*3]
+        val da = pts[i*3+1] - centers[c*3+1]
+        val db = pts[i*3+2] - centers[c*3+2]
         return dl*dl + da*da + db*db
     }
 
