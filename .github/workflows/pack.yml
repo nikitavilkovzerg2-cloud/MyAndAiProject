@@ -1,0 +1,23 @@
+name: Pack repository for DeepSeek
+
+on:
+  workflow_dispatch:   # позволяет запускать вручную кнопкой
+
+jobs:
+  pack-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pack repository with Repomix
+        uses: yamadashy/repomix/.github/actions/repomix@main
+        with:
+          output: repomix-output.txt
+          style: plain
+
+      - name: Upload Repomix output
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-project-pack
+          path: repomix-output.txt
