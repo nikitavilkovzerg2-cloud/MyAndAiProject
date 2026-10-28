@@ -280,11 +280,11 @@ Ecru|Ecru|F0EADA
         return bi
     }
 
-    // Новая формула: уменьшаем влияние яркости и увеличиваем влияние цвета
+    // Стандартная формула CIE76. Лучше разделяет волосы и кожу за счет учета светлоты (L).
     fun colorDistance(lab1: FloatArray, lab2: FloatArray): Float {
-        val dL = (lab1[0] - lab2[0]) * 0.6f
-        val da = (lab1[1] - lab2[1]) * 1.4f
-        val db = (lab1[2] - lab2[2]) * 1.4f
+        val dL = lab1[0] - lab2[0]
+        val da = lab1[1] - lab2[1]
+        val db = lab1[2] - lab2[2]
         return dL * dL + da * da + db * db
     }
 }
