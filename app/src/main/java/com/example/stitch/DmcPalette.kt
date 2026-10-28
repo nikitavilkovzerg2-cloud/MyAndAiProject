@@ -24,7 +24,7 @@ fun rgb2lab(r: Int, g: Int, b: Int): FloatArray {
 private fun fx(t: Float): Float =
     if (t > 0.008856f) t.pow(1f/3f) else (7.787f*t + 16f/116f)
 
-object DmcPalette : PaletteProvider {
+object DmcPalette {
     private val RAW = """
 310|Black|000000
 Blanc|White|FFFFFF
@@ -244,7 +244,7 @@ Ecru|Ecru|F0EADA
 3771|Terra Cotta Ultra Vy Dk|8B4B3B
 """
 
-    override val all: List<DmcColor> by lazy {
+    val all: List<DmcColor> by lazy {
         val list = mutableListOf<DmcColor>()
         val seen = mutableSetOf<String>()
         for (line in RAW.trim().split("\n")) {
@@ -262,24 +262,29 @@ Ecru|Ecru|F0EADA
         list
     }
 
-    override fun nearest(lab: FloatArray): DmcColor {
+    fun nearest(lab: FloatArray): DmcColor {
         var best = all[0]; var bd = Float.MAX_VALUE
         for (c in all) {
-            val d = sq(c.lab[0]-lab[0]) + sq(c.lab[1]-lab[1]) + sq(c.lab[2]-lab[2])
+            val d = colorDistance(c.lab, lab)
             if (d < bd) { bd = d; best = c }
         }
         return best
     }
 
-    override fun nearestIndex(lab: FloatArray, list: List<DmcColor>): Int {
+    fun nearestIndex(lab: FloatArray, list: List<DmcColor>): Int {
         var bi = 0; var bd = Float.MAX_VALUE
         for (i in list.indices) {
-            val c = list[i]
-            val d = sq(c.lab[0]-lab[0]) + sq(c.lab[1]-lab[1]) + sq(c.lab[2]-lab[2])
+            val d = colorDistance(list[i].lab, lab)
             if (d < bd) { bd = d; bi = i }
         }
         return bi
     }
 
-    private fun sq(x: Float) = x*x
+    // Новая формула: уменьшаем влияние яркости и увеличиваем влияние цвета
+    fun colorDistance(lab1: FloatArray, lab2: FloatArray): Float {
+        val dL = (lab1[0] - lab2[0]) * 0.6f
+        val da = (lab1[1] - lab2[1]) * 1.4f
+        val db = (lab1[2] - lab2[2]) * 1.4f
+        return dL * dL + da * da + db * db
+    }
 }
