@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,7 +21,13 @@ jobs:
         with:
           gradle-version: 8.5
       - run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
+      
+      # Этот шаг автоматически создаст релиз и прикрепит к нему ваш APK
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: build-${{ github.run_number }}
+          name: Сборка ${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
